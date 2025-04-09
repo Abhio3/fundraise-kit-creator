@@ -1,16 +1,23 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState } from "react";
-import { PlusCircle, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import { PlusCircle, LogOut, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/AuthProvider";
+import KitFormModal from "@/components/KitFormModal";
+import { Kit, useKits } from "@/hooks/useKits";
+import { Link } from "react-router-dom";
 
 const Index = () => {
-  const [kits, setKits] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { toast } = useToast();
   const { user, signOut } = useAuth();
+  const { useKitsList, useCreateKit, useFundraisersList } = useKits();
+  
+  const { data: kits = [], isLoading: isLoadingKits } = useKitsList();
+  const { data: fundraisers = [], isLoading: isLoadingFundraisers } = useFundraisersList();
+  const { mutateAsync: createKit, isPending: isCreatingKit } = useCreateKit();
 
   const openCreateKitModal = () => {
     setShowCreateModal(true);
@@ -18,6 +25,20 @@ const Index = () => {
       title: "Create a new kit",
       description: "Follow the steps to create your fundraising kit"
     });
+  };
+
+  const handleCreateKit = async (kitData: Kit) => {
+    try {
+      await createKit(kitData);
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error("Error creating kit:", error);
+      toast({
+        title: "Error creating kit",
+        description: "There was a problem creating your kit. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleSignOut = async () => {
@@ -56,12 +77,21 @@ const Index = () => {
           <Button 
             onClick={openCreateKitModal}
             className="bg-yellow-500 hover:bg-yellow-600 text-white"
+            disabled={isCreatingKit}
           >
-            <PlusCircle className="mr-2 h-4 w-4" /> Create New Kit
+            {isCreatingKit ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
+            ) : (
+              <><PlusCircle className="mr-2 h-4 w-4" /> Create New Kit</>
+            )}
           </Button>
         </div>
 
-        {kits.length === 0 ? (
+        {isLoadingKits ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-12 w-12 animate-spin text-yellow-500" />
+          </div>
+        ) : kits.length === 0 ? (
           <Card className="bg-white border-gray-200 shadow-sm">
             <CardHeader>
               <CardTitle className="text-gray-800">No Fundraising Kits</CardTitle>
@@ -90,42 +120,51 @@ const Index = () => {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Kit cards will be rendered here when available */}
+            {kits.map((kit) => (
+              <Card key={kit.id} className="bg-white border-gray-200 hover:border-yellow-300 transition-all shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-gray-800">{kit.name}</CardTitle>
+                  <CardDescription className="text-gray-500">
+                    {kit.description || "No description provided"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {kit.header_desktop_image ? (
+                    <img 
+                      src={kit.header_desktop_image} 
+                      alt={kit.name} 
+                      className="w-full h-32 object-cover rounded-md"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://placehold.co/600x200/yellow/black?text=Fundraising+Kit";
+                      }}
+                    />
+                  ) : (
+                    <div className="bg-gray-100 h-32 flex items-center justify-center rounded-md">
+                      <p className="text-gray-400">No header image</p>
+                    </div>
+                  )}
+                </CardContent>
+                <CardFooter className="border-t border-gray-100 pt-4">
+                  <Button 
+                    className="w-full bg-yellow-500 hover:bg-yellow-600 text-white"
+                    asChild
+                  >
+                    <Link to={`/kit/${kit.id}`}>View Details</Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
           </div>
         )}
       </main>
 
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-lg bg-white border-gray-200 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-gray-800">Create New Fundraising Kit</CardTitle>
-              <CardDescription className="text-gray-500">
-                Follow the steps below to set up your fundraising kit
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <p className="text-gray-500">
-                  Your kit will include customizable sections for:
-                </p>
-                <ul className="list-disc list-inside text-gray-500 space-y-2">
-                  <li>Header with mobile and desktop images</li>
-                  <li>Video section with YouTube embed</li>
-                  <li>What to do steps</li>
-                  <li>WhatsApp message templates</li>
-                  <li>Social media posts</li>
-                </ul>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>
-              <Button className="bg-yellow-500 hover:bg-yellow-600 text-white">
-                Continue
-              </Button>
-            </CardFooter>
-          </Card>
-        </div>
+        <KitFormModal
+          open={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSave={handleCreateKit}
+          fundraisers={fundraisers}
+        />
       )}
     </div>
   );
