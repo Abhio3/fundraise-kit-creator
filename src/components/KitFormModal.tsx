@@ -193,7 +193,7 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                     <SelectValue placeholder="Select a fundraiser" />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-700">
-                    <SelectItem value="">No Assignment</SelectItem>
+                    <SelectItem value="none">No Assignment</SelectItem>
                     {fundraisers.map((fundraiser) => (
                       <SelectItem key={fundraiser.id} value={fundraiser.id || ""}>
                         {fundraiser.name}
@@ -336,7 +336,9 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                 <p><strong>Description:</strong> {kitData.description || "No description provided"}</p>
                 <p><strong>Header Images:</strong> {kitData.header_desktop_image ? "Desktop ✓" : "Desktop ✗"} | {kitData.header_mobile_image ? "Mobile ✓" : "Mobile ✗"}</p>
                 <p><strong>Sections:</strong> {kitData.sections?.map(s => s.name).join(", ") || "No sections selected"}</p>
-                <p><strong>Fundraiser:</strong> {fundraisers.find(f => f.id === kitData.fundraiser_id)?.name || "None"}</p>
+                <p><strong>Fundraiser:</strong> {kitData.fundraiser_id !== "none" && kitData.fundraiser_id !== null ? 
+                  fundraisers.find(f => f.id === kitData.fundraiser_id)?.name || "None" : 
+                  "None"}</p>
               </div>
             </div>
           )}

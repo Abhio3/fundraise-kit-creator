@@ -126,7 +126,7 @@ export const useKits = () => {
         description: kit.description,
         header_desktop_image: kit.header_desktop_image,
         header_mobile_image: kit.header_mobile_image,
-        fundraiser_id: kit.fundraiser_id,
+        fundraiser_id: kit.fundraiser_id === "none" ? null : kit.fundraiser_id,
       })
       .select()
       .single();
