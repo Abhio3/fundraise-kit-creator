@@ -127,6 +127,7 @@ export const useKits = () => {
         header_desktop_image: kit.header_desktop_image,
         header_mobile_image: kit.header_mobile_image,
         fundraiser_id: kit.fundraiser_id === "none" ? null : kit.fundraiser_id,
+        user_id: (await supabase.auth.getUser()).data.user?.id
       })
       .select()
       .single();
@@ -166,6 +167,109 @@ export const useKits = () => {
     });
 
     return newKit;
+  };
+
+  // Update an existing kit
+  const updateKit = async (kit: Kit) => {
+    if (!kit.id) {
+      toast({
+        title: "Failed to update kit",
+        description: "Kit ID is missing",
+        variant: "destructive",
+      });
+      return null;
+    }
+
+    // First update the kit
+    const { error: kitError } = await supabase
+      .from("kits")
+      .update({
+        name: kit.name,
+        description: kit.description,
+        header_desktop_image: kit.header_desktop_image,
+        header_mobile_image: kit.header_mobile_image,
+        fundraiser_id: kit.fundraiser_id === "none" ? null : kit.fundraiser_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", kit.id);
+
+    if (kitError) {
+      toast({
+        title: "Failed to update kit",
+        description: kitError.message,
+        variant: "destructive",
+      });
+      console.error("Error updating kit:", kitError);
+      return null;
+    }
+
+    // Get existing sections to compare with new ones
+    const { data: existingSections } = await supabase
+      .from("kit_sections")
+      .select("id, section_type")
+      .eq("kit_id", kit.id);
+
+    // Delete sections that are no longer in the kit
+    if (existingSections) {
+      const newSectionIds = kit.sections?.map(s => s.id).filter(Boolean) || [];
+      const sectionsToDelete = existingSections.filter(s => !newSectionIds.includes(s.id));
+      
+      for (const section of sectionsToDelete) {
+        const { error } = await supabase
+          .from("kit_sections")
+          .delete()
+          .eq("id", section.id);
+        
+        if (error) {
+          console.error(`Error deleting section ${section.id}:`, error);
+        }
+      }
+    }
+
+    // Update or create sections
+    if (kit.sections && kit.sections.length > 0) {
+      for (const section of kit.sections) {
+        if (section.id) {
+          // Update existing section
+          const { error } = await supabase
+            .from("kit_sections")
+            .update({
+              name: section.name,
+              description: section.description,
+              section_type: section.section_type,
+              position: section.position,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", section.id);
+
+          if (error) {
+            console.error(`Error updating section ${section.id}:`, error);
+          }
+        } else {
+          // Create new section
+          const { error } = await supabase
+            .from("kit_sections")
+            .insert({
+              kit_id: kit.id,
+              name: section.name,
+              description: section.description,
+              section_type: section.section_type,
+              position: section.position,
+            });
+
+          if (error) {
+            console.error("Error creating new section:", error);
+          }
+        }
+      }
+    }
+
+    toast({
+      title: "Kit updated successfully",
+      description: `Your kit "${kit.name}" has been updated.`,
+    });
+
+    return await getKit(kit.id);
   };
 
   // Upload an image to Supabase storage
@@ -230,6 +334,7 @@ export const useKits = () => {
       .insert({
         name: fundraiser.name,
         description: fundraiser.description,
+        user_id: (await supabase.auth.getUser()).data.user?.id
       })
       .select()
       .single();
@@ -287,6 +392,19 @@ export const useKits = () => {
     });
   };
 
+  // Mutation for updating a kit
+  const useUpdateKit = () => {
+    return useMutation({
+      mutationFn: updateKit,
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: ["kits"] });
+        if (data?.id) {
+          queryClient.invalidateQueries({ queryKey: ["kit", data.id] });
+        }
+      },
+    });
+  };
+
   // Mutation for creating a fundraiser
   const useCreateFundraiser = () => {
     return useMutation({
@@ -301,11 +419,13 @@ export const useKits = () => {
     getKits,
     getKit,
     createKit,
+    updateKit,
     uploadImage,
     isUploading,
     useKitsList,
     useKitDetails,
     useCreateKit,
+    useUpdateKit,
     getFundraisers,
     createFundraiser,
     useFundraisersList,

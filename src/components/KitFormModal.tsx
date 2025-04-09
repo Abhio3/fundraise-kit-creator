@@ -19,19 +19,27 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { useKits, Kit, Fundraiser } from "@/hooks/useKits";
-import { Loader2, Upload } from "lucide-react";
+import { useKits, Kit, Fundraiser, KitSection } from "@/hooks/useKits";
+import { Loader2, Upload, PlusCircle, Trash2, X } from "lucide-react";
 
 interface KitFormModalProps {
   open: boolean;
   onClose: () => void;
   onSave: (kitData: Kit) => void;
   fundraisers: Fundraiser[];
+  editingKit?: Kit; // Optional prop for editing existing kit
 }
 
-const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalProps) => {
+const KitFormModal = ({ 
+  open, 
+  onClose, 
+  onSave, 
+  fundraisers = [], 
+  editingKit 
+}: KitFormModalProps) => {
+  const isEditing = !!editingKit;
   const [step, setStep] = useState(1);
-  const [kitData, setKitData] = useState<Kit>({
+  const [kitData, setKitData] = useState<Kit>(editingKit || {
     name: "",
     description: "",
     header_desktop_image: "",
@@ -40,17 +48,9 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
     sections: [],
   });
   
-  const [selectedSections, setSelectedSections] = useState<{
-    video: boolean;
-    whatToDo: boolean;
-    whatsapp: boolean;
-    social: boolean;
-  }>({
-    video: false,
-    whatToDo: false,
-    whatsapp: false,
-    social: false
-  });
+  const [customSections, setCustomSections] = useState<KitSection[]>(
+    editingKit?.sections || []
+  );
   
   const [isUploading, setIsUploading] = useState({
     desktop: false,
@@ -68,11 +68,34 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
     setKitData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSectionToggle = (section: keyof typeof selectedSections) => {
-    setSelectedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
+  const addSection = (type: KitSection["section_type"]) => {
+    const sectionNames = {
+      video: "Video Section",
+      whatToDo: "What To Do Steps",
+      whatsapp: "WhatsApp Templates",
+      social: "Social Media Posts"
+    };
+    
+    const newSection: KitSection = {
+      name: sectionNames[type],
+      section_type: type,
+      position: customSections.length
+    };
+    
+    setCustomSections([...customSections, newSection]);
+  };
+
+  const removeSection = (index: number) => {
+    const updatedSections = [...customSections];
+    updatedSections.splice(index, 1);
+    
+    // Update positions for remaining sections
+    const reorderedSections = updatedSections.map((section, idx) => ({
+      ...section,
+      position: idx
     }));
+    
+    setCustomSections(reorderedSections);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'desktop' | 'mobile') => {
@@ -96,43 +119,8 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
 
   const handleNext = () => {
     if (step === 3) {
-      // Process sections before going to review
-      const sections: Kit["sections"] = [];
-      let position = 0;
-      
-      if (selectedSections.video) {
-        sections.push({
-          name: "Video Section",
-          section_type: "video",
-          position: position++
-        });
-      }
-      
-      if (selectedSections.whatToDo) {
-        sections.push({
-          name: "What To Do Steps",
-          section_type: "whatToDo",
-          position: position++
-        });
-      }
-      
-      if (selectedSections.whatsapp) {
-        sections.push({
-          name: "WhatsApp Templates",
-          section_type: "whatsapp",
-          position: position++
-        });
-      }
-      
-      if (selectedSections.social) {
-        sections.push({
-          name: "Social Media Posts",
-          section_type: "social",
-          position: position++
-        });
-      }
-      
-      setKitData(prev => ({ ...prev, sections }));
+      // Update kit data with current sections before going to review
+      setKitData(prev => ({ ...prev, sections: customSections }));
     }
     
     setStep(step + 1);
@@ -144,7 +132,9 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(kitData);
+    // Make sure we have the latest sections
+    const finalKitData = { ...kitData, sections: customSections };
+    onSave(finalKitData);
   };
 
   return (
@@ -152,7 +142,9 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
       <DialogContent className="bg-gray-900 text-white border-gray-800 sm:max-w-[600px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle className="text-xl text-white">Create Fundraising Kit</DialogTitle>
+            <DialogTitle className="text-xl text-white">
+              {isEditing ? "Edit" : "Create"} Fundraising Kit
+            </DialogTitle>
             <DialogDescription className="text-gray-400">
               Step {step} of 4: {step === 1 ? "Basic Info" : step === 2 ? "Header Design" : step === 3 ? "Sections" : "Review"}
             </DialogDescription>
@@ -187,7 +179,7 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                 <Label htmlFor="fundraiser">Assign to Fundraiser</Label>
                 <Select 
                   onValueChange={(value) => handleSelectChange("fundraiser_id", value)}
-                  value={kitData.fundraiser_id || ""}
+                  value={kitData.fundraiser_id || "none"}
                 >
                   <SelectTrigger className="bg-gray-800 border-gray-700">
                     <SelectValue placeholder="Select a fundraiser" />
@@ -223,7 +215,14 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                   )}
                 </div>
                 {kitData.header_desktop_image && (
-                  <p className="text-xs text-gray-400">Upload successful</p>
+                  <div className="relative mt-2">
+                    <img 
+                      src={kitData.header_desktop_image} 
+                      alt="Desktop preview" 
+                      className="w-full h-32 object-cover rounded"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Upload successful</p>
+                  </div>
                 )}
               </div>
               
@@ -243,88 +242,123 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                   )}
                 </div>
                 {kitData.header_mobile_image && (
-                  <p className="text-xs text-gray-400">Upload successful</p>
+                  <div className="relative mt-2">
+                    <img 
+                      src={kitData.header_mobile_image} 
+                      alt="Mobile preview" 
+                      className="w-40 h-32 object-cover rounded"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Upload successful</p>
+                  </div>
                 )}
               </div>
               
-              <div className="grid gap-2">
-                <Label>Preview</Label>
-                <div className="bg-gray-800 border border-gray-700 rounded-md p-4 text-center">
-                  {kitData.header_desktop_image ? (
-                    <img 
-                      src={kitData.header_desktop_image} 
-                      alt="Desktop Preview" 
-                      className="max-h-40 mx-auto object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "https://placehold.co/600x200/yellow/black?text=Preview";
-                      }}
-                    />
-                  ) : (
+              {!kitData.header_desktop_image && !kitData.header_mobile_image && (
+                <div className="grid gap-2">
+                  <Label>Preview</Label>
+                  <div className="bg-gray-800 border border-gray-700 rounded-md p-4 text-center">
                     <div className="bg-gray-700 h-40 flex items-center justify-center rounded">
                       <div className="text-gray-400 flex flex-col items-center">
                         <Upload className="h-8 w-8 mb-2" />
-                        <p>Upload desktop header image</p>
+                        <p>Upload images for preview</p>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           {step === 3 && (
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label>Select Sections</Label>
+                <Label>Kit Sections</Label>
+                <p className="text-sm text-gray-400 mb-2">
+                  Add or remove sections for your fundraising kit. Each section can contain different types of content.
+                </p>
+                
                 <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <input 
-                      type="checkbox" 
-                      id="video" 
-                      className="accent-yellow-300 w-4 h-4" 
-                      checked={selectedSections.video}
-                      onChange={() => handleSectionToggle('video')}
-                    />
-                    <Label htmlFor="video">Video Section</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input 
-                      type="checkbox" 
-                      id="whatToDo" 
-                      className="accent-yellow-300 w-4 h-4" 
-                      checked={selectedSections.whatToDo}
-                      onChange={() => handleSectionToggle('whatToDo')}
-                    />
-                    <Label htmlFor="whatToDo">What To Do Steps</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input 
-                      type="checkbox" 
-                      id="whatsapp" 
-                      className="accent-yellow-300 w-4 h-4" 
-                      checked={selectedSections.whatsapp}
-                      onChange={() => handleSectionToggle('whatsapp')}
-                    />
-                    <Label htmlFor="whatsapp">WhatsApp Templates</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input 
-                      type="checkbox" 
-                      id="social" 
-                      className="accent-yellow-300 w-4 h-4" 
-                      checked={selectedSections.social}
-                      onChange={() => handleSectionToggle('social')}
-                    />
-                    <Label htmlFor="social">Social Media Posts</Label>
+                  {customSections.length > 0 ? (
+                    <div className="space-y-2">
+                      {customSections.map((section, index) => (
+                        <div 
+                          key={index} 
+                          className="flex items-center justify-between p-3 bg-gray-800 rounded-md border border-gray-700"
+                        >
+                          <div>
+                            <p className="font-medium">{section.name}</p>
+                            <p className="text-xs text-gray-400">
+                              {section.section_type === "video" && "Video content"}
+                              {section.section_type === "whatToDo" && "Step by step instructions"}
+                              {section.section_type === "whatsapp" && "WhatsApp message templates"}
+                              {section.section_type === "social" && "Social media content"}
+                            </p>
+                          </div>
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => removeSection(index)}
+                            className="text-gray-400 hover:text-white hover:bg-gray-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-800 border border-gray-700 rounded-md p-4 text-center">
+                      <p className="text-gray-400">No sections added yet. Add sections below.</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="mt-4">
+                  <p className="font-semibold mb-2">Add Section</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-gray-700 hover:bg-gray-800 flex items-center"
+                      onClick={() => addSection("video")}
+                    >
+                      <PlusCircle className="h-4 w-4 mr-2" /> 
+                      Video Section
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-gray-700 hover:bg-gray-800 flex items-center"
+                      onClick={() => addSection("whatToDo")}
+                    >
+                      <PlusCircle className="h-4 w-4 mr-2" /> 
+                      What To Do
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-gray-700 hover:bg-gray-800 flex items-center"
+                      onClick={() => addSection("whatsapp")}
+                    >
+                      <PlusCircle className="h-4 w-4 mr-2" /> 
+                      WhatsApp
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-gray-700 hover:bg-gray-800 flex items-center"
+                      onClick={() => addSection("social")}
+                    >
+                      <PlusCircle className="h-4 w-4 mr-2" /> 
+                      Social Posts
+                    </Button>
                   </div>
                 </div>
+                
+                {customSections.length === 0 && (
+                  <p className="text-yellow-300 text-sm">Please add at least one section to continue.</p>
+                )}
               </div>
-              {!selectedSections.video && 
-               !selectedSections.whatToDo && 
-               !selectedSections.whatsapp && 
-               !selectedSections.social && (
-                <p className="text-yellow-300 text-sm">Please select at least one section to continue.</p>
-              )}
             </div>
           )}
 
@@ -335,7 +369,7 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                 <p><strong>Name:</strong> {kitData.name}</p>
                 <p><strong>Description:</strong> {kitData.description || "No description provided"}</p>
                 <p><strong>Header Images:</strong> {kitData.header_desktop_image ? "Desktop ✓" : "Desktop ✗"} | {kitData.header_mobile_image ? "Mobile ✓" : "Mobile ✗"}</p>
-                <p><strong>Sections:</strong> {kitData.sections?.map(s => s.name).join(", ") || "No sections selected"}</p>
+                <p><strong>Sections ({customSections.length}):</strong> {customSections.map(s => s.name).join(", ") || "No sections selected"}</p>
                 <p><strong>Fundraiser:</strong> {kitData.fundraiser_id !== "none" && kitData.fundraiser_id !== null ? 
                   fundraisers.find(f => f.id === kitData.fundraiser_id)?.name || "None" : 
                   "None"}</p>
@@ -359,7 +393,7 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                 type="button" 
                 onClick={handleNext} 
                 className="bg-yellow-300 hover:bg-yellow-400 text-black"
-                disabled={step === 3 && !selectedSections.video && !selectedSections.whatToDo && !selectedSections.whatsapp && !selectedSections.social}
+                disabled={step === 3 && customSections.length === 0}
               >
                 Next
               </Button>
@@ -369,7 +403,7 @@ const KitFormModal = ({ open, onClose, onSave, fundraisers = [] }: KitFormModalP
                 className="bg-yellow-300 hover:bg-yellow-400 text-black"
                 disabled={!kitData.name || (!kitData.header_desktop_image && !kitData.header_mobile_image)}
               >
-                Create Kit
+                {isEditing ? "Update" : "Create"} Kit
               </Button>
             )}
           </DialogFooter>
